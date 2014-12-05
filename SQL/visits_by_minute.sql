@@ -7,8 +7,8 @@ SELECT trunc(servertime) as serverdate,
        count(*) as visits
 INTO a.feng_vt_mn
 FROM p.fact_visits
-WHERE trunc(servertime) >= '2014-05-01'
-  and trunc(servertime) <= '2014-05-31'
+WHERE trunc(servertime) >= '2012-12-31'
+  and trunc(servertime) <= '2014-11-02'
 GROUP BY trunc(servertime), 
          datepart(hour, servertime), 
          datepart(minute, servertime)
@@ -18,25 +18,31 @@ ORDER BY trunc(servertime),
 GO
 
 -- aggregate visits data by minute for each device --
+-- countryid = 1: US
+-- 
 SELECT dropif('a', 'feng_vt_mn_device')
 GO
 SELECT trunc(servertime) as serverdate, 
        datepart(hour, servertime) as hr, 
        datepart(minute, servertime) as mn, 
        devicetypeid,
+       durationid,
        count(*) as visits
 INTO a.feng_vt_mn_device
 FROM p.fact_visits
-WHERE trunc(servertime) >= '2014-05-01'
-  and trunc(servertime) <= '2014-05-31'
+WHERE trunc(servertime) >= '2012-12-31'
+  and trunc(servertime) <= '2014-11-02'
+  and countryid = 1
 GROUP BY trunc(servertime), 
          datepart(hour, servertime), 
          datepart(minute, servertime),
-         devicetypeid
+         devicetypeid,
+         durationid
 ORDER BY trunc(servertime), 
          datepart(hour, servertime), 
          datepart(minute, servertime),
-         devicetypeid
+         devicetypeid,
+         durationid
 GO
 
 
