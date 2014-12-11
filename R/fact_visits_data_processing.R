@@ -2,6 +2,7 @@ library(dplyr)
 library(ggplot2)
 options(java.parameters = "-Xmx10000m")
 library(xlsx)
+library(chron)
 
 visits.per.minute.raw <- sqlQuery(.dwMatrix, "select * from a.feng_vt_mn")
 visits.per.minute <- dplyr::arrange(visits.per.minute.raw, serverdate, hr, mn)
@@ -94,7 +95,34 @@ tmp <- numeric(length(tvtime) * 5)
 for (i in 1:length(tvtime)) {
   tmp[((i-1)*5+1):(i*5)] <- seq(tvtime[i], tvtime[i]+4)
 }
-tvtime.5min.ext <- unique(tmp)
+
+timestamp.update <- function(x) {
+  if (substr(x, 11, 12) > 59) {
+    mn <- as.numeric(substr(x, 11, 12)) - 60
+    mn <- paste("0", mn, sep="")
+    mn <- substr(mn, nchar(mn)-1, nchar(mn))
+    hr <- as.numeric(substr(x, 9, 10)) + 1
+    dt <- as.Date(substr(x, 1, 8), "%Y%m%d")
+    if (hr > 23) {
+      hr <- "00"
+      dt <- as.character(dt + 1)
+      dt <- gsub("-", "", dt)
+    } else {
+      hr <- paste("0", hr, sep="")
+      hr <- substr(hr, nchar(hr)-1, nchar(hr))
+      dt <- gsub("-", "", as.character(dt))
+    }
+    x <- paste(dt, hr, mn, sep="")
+  }
+  x
+}
+for (i in 1:length(tmp)) {
+  tmp[i] <- timestamp.update(tmp[i])
+}
+
+
+tvtime.5min.ext <- sort(tmp)
+tvtime.5min.ext.uniq <- unique(tvtime.5min.ext)
 
 all.date <- as.character(seq(from=as.Date("2012-12-31"), to=as.Date("2014-11-02"), by=1))
 all.date <- gsub("-", "", all.date)
@@ -117,7 +145,62 @@ all.time$time <- paste(all.time$date, all.time$hour, all.time$minute, sep="")
 all.time <- dplyr::select(all.time, time)
 all.time <- dplyr::arrange(all.time, time)
 
-time.compare <- merge(all.time, data.frame(time=tvtime.5min.ext, tv=1), all.x=T, all.y=T)
+time.compare <- merge(all.time, data.frame(time=tvtime.5min.ext.uniq, tv=1), all.x=T, all.y=T)
+time.compare[is.na(time.compare)] <- 0
+(tv.coverage <- sum(time.compare$tv) / nrow(time.compare))
+time.compare$time.POSIX <- strptime(paste(substr(time.compare$time, 1, 4),
+                                            "-",
+                                            substr(time.compare$time, 5, 6),
+                                            "-",
+                                            substr(time.compare$time, 7, 8),
+                                            " ",
+                                            substr(time.compare$time, 9, 10),
+                                            ":",
+                                            substr(time.compare$time, 11, 12),
+                                            ":00",
+                                            sep=""),
+                                    "%Y-%m-%d %H:%M:%S")
+
+with(time.compare[1:(24*60), ], {
+  plot(time.POSIX, tv, pch=19, cex=0.01, ylim=c(-1, 2),
+       xlab="time", ylab="TV indicator", main=c("TV coverage for last day of 2012"))
+})
+
+tvtime.group <- dplyr::group_by(data.frame(time=tvtime.5min.ext), time)
+tvtime.group.count <- dplyr::summarise(tvtime.group, count=n())
+(sum(tvtime.group.count$count > 1) / nrow(tvtime.group.count))
+
+tvtime.group.count$time <- as.character(tvtime.group.count$time)
+fulltime <- merge(tvtime.group.count, all.time, all.x=T, all.y=T)
+fulltime <- dplyr::arrange(fulltime, time)
+fulltime$time.POSIX <- strptime(paste(substr(fulltime$time, 1, 4),
+                                                "-",
+                                                substr(fulltime$time, 5, 6),
+                                                "-",
+                                                substr(fulltime$time, 7, 8),
+                                                " ",
+                                                substr(fulltime$time, 9, 10),
+                                                ":",
+                                                substr(fulltime$time, 11, 12),
+                                                ":00",
+                                                sep=""),
+                                          "%Y-%m-%d %H:%M:%S")
+fulltime$count[is.na(fulltime$count)] <- 0
+write.csv(fulltime, file="C:/Users/fyi/Desktop/tvcoverage.csv", row.names=F)
+
+
+
+
+
+
+####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
 no.tv.time <- time.compare$time[is.na(time.compare$tv)]
 no.tv.minute <- data.frame(min=substr(no.tv.time, 9, 12))
 no.tv.minute <- dplyr::group_by(no.tv.minute, min)
